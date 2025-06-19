@@ -162,7 +162,7 @@ app.post('/generate', upload.single('image'), async (req, res) => {
 
         res.status(200).json({ imageUrl: proxiedImageUrl }); // Kirim URL yang sudah ditutupi
 
-    } catch (error)
+    } catch (error) {
         console.error('Error in /generate endpoint:', error.message);
         res.status(500).json({ error: `An internal server error occurred: ${error.message}` });
     }
