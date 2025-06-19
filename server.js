@@ -1,11 +1,12 @@
 // Import library yang dibutuhkan
 const express = require('express');
 const multer = require('multer');
-const axios = require('axios'); // PERUBAHAN: Mengganti node-fetch dengan axios
+const axios = require('axios');
 const FormData = require('form-data');
 const path = require('path');
 const cors = require('cors');
 const FileType = require('file-type');
+const { URL } = require('url');
 
 // Inisialisasi aplikasi Express
 const app = express();
@@ -18,7 +19,6 @@ const stylePrompts = {
     'simpson': 'Ubah tekstur gambar ini agar seperti ilustrasi The Simpson, tanpa mengubah bentuk atau susunan objek aslinya'
 };
 
-// Definisikan ukuran yang valid
 const validSizes = ['1024x1024', '1536x1024', '1024x1536'];
 
 // Middleware
@@ -27,12 +27,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Konfigurasi Multer untuk menangani file upload di memori
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 /**
- * Fungsi untuk generate gambar, sekarang menggunakan axios.
+ * Fungsi untuk generate gambar, menggunakan axios.
  */
 const generateArtImage = async (imageBuffer, prompt, size) => {
     if (!imageBuffer) throw new Error("Image buffer is required.");
@@ -55,7 +54,6 @@ const generateArtImage = async (imageBuffer, prompt, size) => {
         contentType: mime,
     });
 
-    // --- PERUBAHAN: Menggunakan Axios untuk request ---
     try {
         const response = await axios.post('https://gpt1image.exomlapi.com/v1/images/generations', form, {
             headers: {
@@ -65,56 +63,73 @@ const generateArtImage = async (imageBuffer, prompt, size) => {
             }
         });
 
-        const json = response.data; // Dengan axios, data ada di `response.data`
-        
-        console.log("Response from external API:", JSON.stringify(json, null, 2));
-
+        const json = response.data;
         if (!json?.data || json.data.length === 0 || !json.data[0].url) {
             const apiMessage = json.message || 'No image URL was returned.';
-            throw new Error(`Fetch to external API succeeded, but the response was invalid. API Message: ${apiMessage}`);
+            throw new Error(`External API response was invalid. Message: ${apiMessage}`);
         }
-
         return json.data[0].url;
     } catch (error) {
-        // Axios membungkus error response di dalam `error.response`
         if (error.response) {
-            console.error('Error from external API:', error.response.status, error.response.data);
-            throw new Error(`External API fetch failed: ${error.response.statusText}. Details: ${JSON.stringify(error.response.data)}`);
+            throw new Error(`External API Error: ${error.response.statusText}. Details: ${JSON.stringify(error.response.data)}`);
         }
-        // Untuk error jaringan atau lainnya
         throw error;
     }
 };
 
-
-// Endpoint untuk melayani halaman utama
+// Endpoint untuk halaman utama
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Endpoint untuk proses generate gambar
+// Endpoint Proxy untuk Gambar
+app.get('/proxy-image/*', async (req, res) => {
+    try {
+        const imagePath = req.params[0];
+        const externalUrl = `https://anondrop.net/${imagePath}`;
+
+        const imageResponse = await axios.get(externalUrl, {
+            responseType: 'arraybuffer'
+        });
+
+        const imageBuffer = Buffer.from(imageResponse.data, 'binary');
+        const fileInfo = await FileType.fromBuffer(imageBuffer);
+        
+        if (fileInfo) {
+            res.setHeader('Content-Type', fileInfo.mime);
+        }
+        
+        res.send(imageBuffer);
+
+    } catch (error) {
+        console.error("Proxy Error:", error.message);
+        res.status(500).send("Failed to proxy image.");
+    }
+});
+
+// Endpoint Generate sekarang membuat URL proxy
 app.post('/generate', upload.single('image'), async (req, res) => {
     try {
         const { style, size } = req.body;
         const imageFile = req.file;
 
-        if (!imageFile) {
-            return res.status(400).json({ error: 'No image file uploaded.' });
-        }
-        if (!style || !stylePrompts[style]) {
-            return res.status(400).json({ error: 'Invalid or missing style parameter.' });
-        }
-        if (!size || !validSizes.includes(size)) {
-            return res.status(400).json({ error: 'Invalid or missing size parameter.' });
-        }
+        if (!imageFile) return res.status(400).json({ error: 'No image file uploaded.' });
+        if (!style || !stylePrompts[style]) return res.status(400).json({ error: 'Invalid style.' });
+        if (!size || !validSizes.includes(size)) return res.status(400).json({ error: 'Invalid size.' });
 
         const prompt = stylePrompts[style];
         console.log(`Image received. Style: ${style}, Size: ${size}. Forwarding to external API...`);
         
-        const imageUrl = await generateArtImage(imageFile.buffer, prompt, size);
-        console.log("Successfully generated image URL:", imageUrl);
+        const externalImageUrl = await generateArtImage(imageFile.buffer, prompt, size);
+        console.log("Successfully generated external URL:", externalImageUrl);
+
+        const urlObject = new URL(externalImageUrl);
+        const imagePath = urlObject.pathname;
+        const proxyUrl = `/proxy-image${imagePath}`;
+
+        console.log(`Created proxy URL: ${proxyUrl}`);
         
-        res.json({ imageUrl: imageUrl });
+        res.json({ imageUrl: proxyUrl });
 
     } catch (error) {
         console.error('Error in /generate endpoint:', error.message);
@@ -123,6 +138,7 @@ app.post('/generate', upload.single('image'), async (req, res) => {
 });
 
 // Jalankan server
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+// PERBAIKAN: Menambahkan '0.0.0.0' agar bisa diakses oleh Railway
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
 });
