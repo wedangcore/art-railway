@@ -1,17 +1,19 @@
-// Import library yang dibutuhkan
+// Impor library yang dibutuhkan
 const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const FormData = require('form-data');
 const path = require('path');
 const cors = require('cors');
-// PERBAIKAN: Hapus 'require' untuk file-type dari sini
-// const FileType = require('file-type'); 
-const { URL } = require('url');
 
 // Inisialisasi aplikasi Express
 const app = express();
+// Railway atau platform hosting lainnya akan memberikan PORT melalui environment variable.
+// Untuk development lokal, kita gunakan port 3000.
 const PORT = process.env.PORT || 3000;
+// PENTING: Untuk environment container seperti Railway, server harus "listen" di 0.0.0.0
+// agar bisa diakses dari luar container.
+const HOST = '0.0.0.0';
 
 // Definisikan prompt untuk setiap style
 const stylePrompts = {
@@ -20,28 +22,38 @@ const stylePrompts = {
     'simpson': 'Ubah tekstur gambar ini agar seperti ilustrasi The Simpson, tanpa mengubah bentuk atau susunan objek aslinya'
 };
 
+// Definisikan ukuran yang valid
 const validSizes = ['1024x1024', '1536x1024', '1024x1536'];
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// --- Middleware ---
+app.use(cors()); // Mengaktifkan Cross-Origin Resource Sharing
+app.use(express.json()); // Mem-parsing body request JSON
+app.use(express.urlencoded({ extended: true })); // Mem-parsing body request URL-encoded
+
+// Menyajikan file statis (seperti index.html) dari folder 'public'
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Konfigurasi Multer untuk menangani file upload di memori
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 } // Batas ukuran file 10MB
+});
 
 /**
- * Fungsi untuk generate gambar, menggunakan axios.
+ * Fungsi untuk generate gambar.
+ * PERBAIKAN KRUSIAL: Menggunakan dynamic import() untuk 'file-type'
+ * karena library ini adalah ESM-only dan tidak bisa di-load dengan require() biasa.
  */
 const generateArtImage = async (imageBuffer, prompt, size) => {
     if (!imageBuffer) throw new Error("Image buffer is required.");
     if (!prompt) throw new Error("Prompt is required.");
     if (!size) throw new Error("Size is required.");
 
-    // PERBAIKAN: Gunakan dynamic import di dalam fungsi async
+    // Dynamic import untuk 'file-type'
     const { fileTypeFromBuffer } = await import('file-type');
     const fileInfo = await fileTypeFromBuffer(imageBuffer);
+
     if (!fileInfo) {
         throw new Error("Could not determine the file type of the uploaded image.");
     }
@@ -61,90 +73,64 @@ const generateArtImage = async (imageBuffer, prompt, size) => {
         const response = await axios.post('https://gpt1image.exomlapi.com/v1/images/generations', form, {
             headers: {
                 ...form.getHeaders(),
-                "referer": "https://gpt1image.exomlapi.com/",
-                "user-agent": "Mozilla/5.0"
+                "Referer": "https://gpt1image.exomlapi.com/",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
             }
         });
 
         const json = response.data;
-        if (!json?.data || json.data.length === 0 || !json.data[0].url) {
+        console.log("Response from external API:", JSON.stringify(json, null, 2));
+
+        if (!json?.data?.[0]?.url) {
             const apiMessage = json.message || 'No image URL was returned.';
-            throw new Error(`External API response was invalid. Message: ${apiMessage}`);
+            throw new Error(`Invalid response structure from external API. Message: ${apiMessage}`);
         }
+
         return json.data[0].url;
     } catch (error) {
         if (error.response) {
-            throw new Error(`External API Error: ${error.response.statusText}. Details: ${JSON.stringify(error.response.data)}`);
+            console.error('Error from external API:', error.response.status, error.response.data);
+            throw new Error(`External API request failed with status ${error.response.status}.`);
         }
+        console.error('Network or other error:', error.message);
         throw error;
     }
 };
 
-// Endpoint untuk halaman utama
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Endpoint Proxy untuk Gambar
-app.get('/proxy-image/*', async (req, res) => {
-    try {
-        const imagePath = req.params[0];
-        const externalUrl = `https://anondrop.net/${imagePath}`;
-
-        const imageResponse = await axios.get(externalUrl, {
-            responseType: 'arraybuffer'
-        });
-
-        const imageBuffer = Buffer.from(imageResponse.data, 'binary');
-        
-        // PERBAIKAN: Gunakan dynamic import di dalam fungsi async
-        const { fileTypeFromBuffer } = await import('file-type');
-        const fileInfo = await fileTypeFromBuffer(imageBuffer);
-        
-        if (fileInfo) {
-            res.setHeader('Content-Type', fileInfo.mime);
-        }
-        
-        res.send(imageBuffer);
-
-    } catch (error) {
-        console.error("Proxy Error:", error.message);
-        res.status(500).send("Failed to proxy image.");
-    }
-});
-
-// Endpoint Generate sekarang membuat URL proxy
+// --- API Endpoint untuk Generate Gambar ---
+// Tidak perlu lagi app.get('/') karena sudah ditangani oleh express.static
 app.post('/generate', upload.single('image'), async (req, res) => {
     try {
         const { style, size } = req.body;
         const imageFile = req.file;
 
-        if (!imageFile) return res.status(400).json({ error: 'No image file uploaded.' });
-        if (!style || !stylePrompts[style]) return res.status(400).json({ error: 'Invalid style.' });
-        if (!size || !validSizes.includes(size)) return res.status(400).json({ error: 'Invalid size.' });
+        // Validasi input
+        if (!imageFile) {
+            return res.status(400).json({ error: 'No image file was uploaded.' });
+        }
+        if (!style || !stylePrompts[style]) {
+            return res.status(400).json({ error: 'Invalid or missing style parameter.' });
+        }
+        if (!size || !validSizes.includes(size)) {
+            return res.status(400).json({ error: 'Invalid or missing size parameter.' });
+        }
 
         const prompt = stylePrompts[style];
         console.log(`Image received. Style: ${style}, Size: ${size}. Forwarding to external API...`);
         
-        const externalImageUrl = await generateArtImage(imageFile.buffer, prompt, size);
-        console.log("Successfully generated external URL:", externalImageUrl);
-
-        const urlObject = new URL(externalImageUrl);
-        const imagePath = urlObject.pathname;
-        const proxyUrl = `/proxy-image${imagePath}`;
-
-        console.log(`Created proxy URL: ${proxyUrl}`);
+        const imageUrl = await generateArtImage(imageFile.buffer, prompt, size);
+        console.log("Successfully generated image URL:", imageUrl);
         
-        res.json({ imageUrl: proxyUrl });
+        res.status(200).json({ imageUrl: imageUrl });
 
     } catch (error) {
         console.error('Error in /generate endpoint:', error.message);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: `An internal server error occurred: ${error.message}` });
     }
 });
 
-// Jalankan server
-// PERBAIKAN: Menambahkan '0.0.0.0' agar bisa diakses oleh Railway
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running on port ${PORT}`);
+// --- Menjalankan Server ---
+// Server mendengarkan di HOST dan PORT yang telah ditentukan.
+app.listen(PORT, HOST, () => {
+    console.log(`Server is running on http://${HOST}:${PORT}`);
 });
