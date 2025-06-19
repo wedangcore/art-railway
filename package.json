@@ -1,19 +1,20 @@
 {
-  "name": "ai-art-generator-backend",
+  "name": "ai-art-generator-backend-fixed",
   "version": "1.0.0",
-  "description": "Backend proxy for AI Art Generator",
+  "description": "Backend proxy for AI Art Generator, refactored for deployment.",
   "main": "server.js",
+  "type": "commonjs",
   "scripts": {
-    "start": "node server.js --omit=dev"
+    "start": "node server.js"
   },
-  "author": "RevanSP",
+  "author": "RevanSP (Refactored)",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.10.0",
+    "axios": "^1.7.2",
     "cors": "^2.8.5",
-    "express": "^5.1.0",
-    "file-type": "^16.5.4",
-    "form-data": "^4.0.3",
-    "multer": "^2.0.1"
+    "express": "^4.19.2",
+    "file-type": "^19.0.0",
+    "form-data": "^4.0.0",
+    "multer": "^1.4.5-lts.1"
   }
 }
