@@ -5,7 +5,8 @@ const axios = require('axios');
 const FormData = require('form-data');
 const path = require('path');
 const cors = require('cors');
-const FileType = require('file-type');
+// PERBAIKAN: Hapus 'require' untuk file-type dari sini
+// const FileType = require('file-type'); 
 const { URL } = require('url');
 
 // Inisialisasi aplikasi Express
@@ -38,7 +39,9 @@ const generateArtImage = async (imageBuffer, prompt, size) => {
     if (!prompt) throw new Error("Prompt is required.");
     if (!size) throw new Error("Size is required.");
 
-    const fileInfo = await FileType.fromBuffer(imageBuffer);
+    // PERBAIKAN: Gunakan dynamic import di dalam fungsi async
+    const { fileTypeFromBuffer } = await import('file-type');
+    const fileInfo = await fileTypeFromBuffer(imageBuffer);
     if (!fileInfo) {
         throw new Error("Could not determine the file type of the uploaded image.");
     }
@@ -93,7 +96,10 @@ app.get('/proxy-image/*', async (req, res) => {
         });
 
         const imageBuffer = Buffer.from(imageResponse.data, 'binary');
-        const fileInfo = await FileType.fromBuffer(imageBuffer);
+        
+        // PERBAIKAN: Gunakan dynamic import di dalam fungsi async
+        const { fileTypeFromBuffer } = await import('file-type');
+        const fileInfo = await fileTypeFromBuffer(imageBuffer);
         
         if (fileInfo) {
             res.setHeader('Content-Type', fileInfo.mime);
