@@ -97,14 +97,42 @@ const generateArtImage = async (imageBuffer, prompt, size) => {
     }
 };
 
+// --- PERUBAHAN BARU: Endpoint Proxy untuk Gambar ---
+// Endpoint ini akan menerima request untuk gambar, mengambilnya dari sumber asli,
+// dan mengirimkannya ke pengguna seolah-olah berasal dari server kita.
+app.get('/files/*', async (req, res) => {
+    try {
+        // Mengambil path gambar dari URL. req.params[0] berisi semua yang cocok dengan wildcard (*)
+        const imagePath = req.params[0];
+        const targetUrl = `https://anondrop.net/${imagePath}`;
+
+        console.log(`Proxying image request for: ${targetUrl}`);
+
+        const response = await axios({
+            method: 'get',
+            url: targetUrl,
+            responseType: 'stream' // PENTING: Minta response sebagai stream
+        });
+
+        // Set header content-type dari response asli ke response kita
+        res.setHeader('Content-Type', response.headers['content-type']);
+        
+        // Alirkan (pipe) data gambar dari sumber asli langsung ke response pengguna
+        response.data.pipe(res);
+
+    } catch (error) {
+        console.error('Image proxy error:', error.message);
+        res.status(500).send('Error fetching the image.');
+    }
+});
+
+
 // --- API Endpoint untuk Generate Gambar ---
-// Tidak perlu lagi app.get('/') karena sudah ditangani oleh express.static
 app.post('/generate', upload.single('image'), async (req, res) => {
     try {
         const { style, size } = req.body;
         const imageFile = req.file;
 
-        // Validasi input
         if (!imageFile) {
             return res.status(400).json({ error: 'No image file was uploaded.' });
         }
@@ -118,10 +146,16 @@ app.post('/generate', upload.single('image'), async (req, res) => {
         const prompt = stylePrompts[style];
         console.log(`Image received. Style: ${style}, Size: ${size}. Forwarding to external API...`);
         
-        const imageUrl = await generateArtImage(imageFile.buffer, prompt, size);
-        console.log("Successfully generated image URL:", imageUrl);
+        const originalImageUrl = await generateArtImage(imageFile.buffer, prompt, size);
+        console.log("Successfully generated original image URL:", originalImageUrl);
+
+        // --- PERUBAHAN: Mengubah URL asli menjadi URL proxy ---
+        const urlObject = new URL(originalImageUrl);
+        const proxiedImageUrl = `/files${urlObject.pathname}`; // Membuat URL relatif ke proxy kita
         
-        res.status(200).json({ imageUrl: imageUrl });
+        console.log("Returning proxied URL to client:", proxiedImageUrl);
+
+        res.status(200).json({ imageUrl: proxiedImageUrl }); // Kirim URL yang sudah ditutupi
 
     } catch (error) {
         console.error('Error in /generate endpoint:', error.message);
