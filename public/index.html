@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Art Generator</title>
+    <link rel="icon" type="image/png" href="https://placehold.co/32x32/a6c1a8/FFFFFF?text=A">
+    <!-- DaisyUI and Tailwind CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@latest/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Ghibli:wght@400;700&family=Google+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Menambahkan Axios CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <style>
+        @font-face {
+            font-family: 'Ghibli';
+            src: url('https://raw.githubusercontent.com/aenoshid/ghibli-font/main/Ghibli-Regular.woff2') format('woff2');
+        }
+        body {
+            font-family: 'Google Sans', sans-serif;
+            background-image: url('https://www.transparenttextures.com/patterns/light-paper-fibers.png');
+        }
+        .font-ghibli {
+            font-family: 'Ghibli', 'Google Sans', sans-serif;
+            letter-spacing: 1px;
+        }
+        .block-shadow {
+            box-shadow: 6px 6px 0px 0px rgba(55, 65, 81, 1);
+        }
+        .btn-custom-shadow {
+             box-shadow: 4px 4px 0px 0px rgba(55, 65, 81, 1);
+        }
+        .btn {
+            transform: none !important;
+            border-radius: 0.5rem;
+        }
+        .btn:active {
+            transform: translateY(2px) translateX(2px) !important;
+            box-shadow: 2px 2px 0px 0px rgba(55, 65, 81, 1) !important;
+        }
+        #loading-overlay {
+            transition: opacity 0.5s ease-out;
+        }
+        #uploadArea {
+            border-color: #6B7280;
+        }
+    </style>
+</head>
+
+<body class="bg-emerald-50 min-h-screen flex flex-col justify-center items-center p-4 gap-8">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-emerald-50 z-50 flex-col items-center justify-center hidden">
+        <img src="https://placehold.co/96x96/a6c1a8/FFFFFF?text=A" alt="Art Generator Icon" class="h-24 w-24 animate-pulse rounded-full">
+        <h1 id="loadingTitle" class="text-3xl font-ghibli text-gray-700 mt-4">Generating your art...</h1>
+        <p class="text-sm mt-2 text-gray-500">Please wait, this may take a moment.</p>
+    </div>
+
+    <div class="card w-full max-w-2xl bg-white border-2 border-gray-700 block-shadow rounded-lg">
+        <div class="card-body">
+            <div class="card-title flex justify-center items-center text-center">
+                <h1 class="text-3xl font-ghibli text-gray-800 flex items-center gap-3">
+                    <img src="https://placehold.co/40x40/a6c1a8/FFFFFF?text=A" alt="Generator Icon" class="h-10 w-10 rounded-full">
+                    <span>AI Art Generator</span>
+                </h1>
+            </div>
+            
+             <p class="text-center text-gray-500 mb-6">Upload your photo, choose a style, and let the magic happen!</p>
+            
+            <form id="generateForm" class="flex flex-col items-center space-y-4">
+                <div class="form-control w-full">
+                    <label for="fileInput" id="uploadArea" class="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-emerald-100 transition-colors">
+                        <svg id="uploadIcon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="bi bi-cloud-arrow-up-fill text-gray-500" viewBox="0 0 16 16">
+                            <path d="M8 2a5.53 5.53 0 0 0-3.594 1.342c-.766.66-1.321 1.52-1.464 2.383C1.266 6.095 0 7.555 0 9.318 0 11.366 1.708 13 3.781 13h8.906C14.502 13 16 11.57 16 9.773c0-1.636-1.242-2.969-2.834-3.194C12.923 3.999 10.69 2 8 2m2.354 5.146a.5.5 0 0 1-.708.708L8.5 6.707V10.5a.5.5 0 0 1-1 0V6.707L6.354 7.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0z"/>
+                        </svg>
+                        <p class="text-sm font-medium mt-4 text-gray-700">Drop your image here or click to browse</p>
+                        <p class="text-xs mt-1 text-gray-500">Only image files are accepted.</p>
+                        <input type="file" id="fileInput" class="hidden" accept="image/*" required>
+                    </label>
+
+                    <div id="fileInfo" class="hidden text-xs bg-gray-100 border-2 border-gray-700 rounded-lg p-3 mt-4 w-full">
+                        <p id="fileName" class="font-medium text-gray-800"></p>
+                        <p id="fileSize" class="text-gray-600"></p>
+                    </div>
+                </div>
+
+                <!-- Opsi Style dan Ukuran -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                    <div class="form-control w-full">
+                        <label class="label">
+                            <span class="label-text">Art Style</span>
+                        </label>
+                        <select id="styleSelect" class="select select-bordered w-full border-2 border-gray-700 rounded-lg">
+                            <option value="ghibli" selected>Ghibli</option>
+                            <option value="pixar">Pixar</option>
+                            <option value="simpson">Simpson</option>
+                        </select>
+                    </div>
+                    <div class="form-control w-full">
+                        <label class="label">
+                            <span class="label-text">Image Size</span>
+                        </label>
+                        <select id="sizeSelect" class="select select-bordered w-full border-2 border-gray-700 rounded-lg">
+                            <option value="1024x1024" selected>1024x1024 (Square)</option>
+                            <option value="1536x1024">1536x1024 (Landscape)</option>
+                            <option value="1024x1536">1024x1536 (Portrait)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" id="submitBtn" class="btn btn-primary bg-emerald-500 hover:bg-emerald-600 text-white w-full border-2 rounded border-gray-700 mt-4 btn-custom-shadow" disabled>
+                    GENERATE
+                </button>
+            </form>
+            
+            <div id="resultContainer" class="hidden w-full mt-6">
+                 <div class="divider text-gray-500 font-ghibli">Result</div>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                    <div class="text-center">
+                        <h3 class="font-bold text-lg mb-2 text-gray-700">Original</h3>
+                        <img id="originalImage" src="" alt="Original" class="w-full h-auto rounded-lg border-2 border-gray-300">
+                    </div>
+                    <div class="text-center">
+                        <h3 id="resultStyleTitle" class="font-bold text-lg mb-2 text-gray-700">Generated Style</h3>
+                        <div id="generatedImageContainer" class="w-full h-auto rounded-lg border-2 border-gray-300 bg-gray-100 flex items-center justify-center min-h-[200px] relative">
+                           <span id="resultSpinner" class="loading loading-spinner loading-lg text-emerald-500"></span>
+                           <img id="generatedImage" src="" alt="Generated" class="hidden w-full h-auto rounded-lg">
+                           <div id="errorMessage" class="hidden p-4 text-center text-red-700"></div>
+                        </div>
+                    </div>
+                 </div>
+                 <a id="downloadButton" href="#" download="generated-art.png" class="btn btn-success text-white w-full mt-4 btn-custom-shadow hidden">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+                     Download Result
+                 </a>
+            </div>
+
+            <div class="divider mt-8"></div> 
+
+            <div class="grid grid-cols-4 gap-2">
+                <a href="https://github.com/RevanSP" target="_blank" class="btn btn-outline border-2 border-gray-700 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-github" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg>
+                </a>
+                <a href="https://www.instagram.com/m9nokuro" target="_blank" class="btn btn-outline border-2 border-gray-700 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-instagram" viewBox="0 0 16 16"><path d="M8 0C5.829 0 5.556.01 4.703.048 3.85.088 3.269.222 2.76.42a3.9 3.9 0 0 0-1.417.923A3.9 3.9 0 0 0 .42 2.76C.222 3.268.087 3.85.048 4.7.01 5.555 0 5.827 0 8.001c0 2.172.01 2.444.048 3.297.04.852.174 1.433.372 1.942.205.526.478.972.923 1.417.444.445.89.719 1.416.923.51.198 1.09.333 1.942.372C5.555 15.99 5.827 16 8 16s2.444-.01 3.298-.048c.851-.04 1.434-.174 1.943-.372a3.9 3.9 0 0 0 1.416-.923c.445-.445.718-.891.923-1.417.197-.509.332-1.09.372-1.942C15.99 10.445 16 10.173 16 8s-.01-2.445-.048-3.299c-.04-.851-.175-1.433-.372-1.941a3.9 3.9 0 0 0-.923-1.417A3.9 3.9 0 0 0 13.24.42c-.51-.198-1.092-.333-1.943-.372C10.443.01 10.172 0 7.998 0zm-.717 1.442h.718c2.136 0 2.389.007 3.232.046.78.035 1.204.166 1.486.275.373.145.64.319.92.599s.453.546.598.92c.11.281.24.705.275 1.485.039.843.047 1.096.047 3.231s-.008 2.389-.047 3.232c-.035.78-.166 1.203-.275 1.485a2.5 2.5 0 0 1-.599.919c-.28.28-.546.453-.92.598-.28.11-.704.24-1.485.276-.843.038-1.096.047-3.232.047s-2.39-.009-3.233-.047c-.78-.036-1.203-.166-1.485-.276a2.5 2.5 0 0 1-.92-.598 2.5 2.5 0 0 1-.6-.92c-.109-.281-.24-.705-.275-1.485-.038-.843-.046-1.096-.046-3.233s.008-2.388.046-3.231c.036-.78.166-1.204.276-1.486.145-.373.319-.64.599-.92s.546-.453.92-.598c.282-.11.705-.24 1.485-.276.738-.034 1.024-.044 2.515-.045zm4.988 1.328a.96.96 0 1 0 0 1.92.96.96 0 0 0 0-1.92m-4.27 1.122a4.109 4.109 0 1 0 0 8.217 4.109 4.109 0 0 0 0-8.217m0 1.441a2.667 2.667 0 1 1 0 5.334 2.667 2.667 0 0 1 0-5.334"/></svg>
+                </a>
+                <a href="https://web.facebook.com/profile.php?id=100082958149027" target="_blank" class="btn btn-outline border-2 border-gray-700 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-facebook" viewBox="0 0 16 16"><path d="M16 8.049c0-4.446-3.582-8.05-8-8.05C3.58 0-.002 3.603-.002 8.05c0 4.017 2.926 7.347 6.75 7.951v-5.625h-2.03V8.05H6.75V6.275c0-2.017 1.195-3.131 3.022-3.131.876 0 1.791.157 1.791.157v1.98h-1.009c-.993 0-1.303.621-1.303 1.258v1.51h2.218l-.354 2.326H9.25V16c3.824-.604 6.75-3.934 6.75-7.951"/></svg>
+                </a>
+                <a href="mailto:revanspstudy28@gmail.com" target="_blank" class="btn btn-outline border-2 border-gray-700 rounded-lg">
+                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-envelope-fill" viewBox="0 0 16 16"><path d="M.05 3.555A2 2 0 0 1 2 2h12a2 2 0 0 1 1.95 1.555L8 8.414zM0 4.697v7.104l5.803-3.558zM6.761 8.83l-6.57 4.027A2 2 0 0 0 2 14h12a2 2 0 0 0 1.808-1.144l-6.57-4.027L8 9.586zm3.436-.586L16 11.801V4.697z"/></svg>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Element References ---
+            const elements = {
+                form: document.getElementById("generateForm"),
+                area: document.getElementById("uploadArea"),
+                input: document.getElementById("fileInput"),
+                info: document.getElementById("fileInfo"),
+                name: document.getElementById("fileName"),
+                size: document.getElementById("fileSize"),
+                submit: document.getElementById("submitBtn"),
+                resultContainer: document.getElementById("resultContainer"),
+                originalImage: document.getElementById("originalImage"),
+                generatedImage: document.getElementById("generatedImage"),
+                generatedImageContainer: document.getElementById("generatedImageContainer"),
+                resultSpinner: document.getElementById("resultSpinner"),
+                downloadButton: document.getElementById("downloadButton"),
+                loadingOverlay: document.getElementById("loading-overlay"),
+                errorMessage: document.getElementById("errorMessage"),
+                styleSelect: document.getElementById("styleSelect"),
+                sizeSelect: document.getElementById("sizeSelect"),
+                resultStyleTitle: document.getElementById("resultStyleTitle"),
+                loadingTitle: document.getElementById("loadingTitle")
+            };
+
+            // --- Helper Functions ---
+            const formatFileSize = (bytes) => {
+                if (!bytes || bytes === 0) return "0 Bytes";
+                const k = 1024;
+                const sizes = ["Bytes", "KB", "MB", "GB"];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
+            };
+            
+            // --- UI Update Functions ---
+            const handleFileSelection = (file) => {
+                if (file && file.type.startsWith('image/')) {
+                    elements.name.textContent = `File: ${file.name}`;
+                    elements.size.textContent = `Size: ${formatFileSize(file.size)}`;
+                    elements.info.classList.remove("hidden");
+                    elements.submit.disabled = false;
+                } else {
+                    alert("Please select an image file (e.g., JPG, PNG, WEBP).");
+                    elements.input.value = null;
+                    elements.info.classList.add("hidden");
+                    elements.submit.disabled = true;
+                }
+            };
+            
+            const setLoadingState = (isLoading, styleText = "art") => {
+                 elements.loadingOverlay.classList.toggle('hidden', !isLoading);
+                 elements.loadingOverlay.classList.toggle('flex', isLoading);
+                 if (isLoading) {
+                    elements.loadingTitle.textContent = `Generating your ${styleText} art...`
+                 }
+            }
+            
+            const showResultState = (isLoading, error = null) => {
+                elements.resultContainer.classList.remove("hidden");
+                elements.resultSpinner.style.display = isLoading ? 'block' : 'none';
+                
+                elements.generatedImage.classList.add('hidden');
+                elements.downloadButton.classList.add('hidden');
+                elements.errorMessage.classList.add('hidden');
+
+                if (error) {
+                    elements.resultSpinner.style.display = 'none';
+                    elements.errorMessage.textContent = error;
+                    elements.errorMessage.classList.remove('hidden');
+                }
+            }
+
+            // --- Event Listeners for File Input ---
+            // PERBAIKAN: Menghapus event listener 'click' pada 'area'
+            // dan hanya mengandalkan perilaku default dari <label for="..."></label>
+            
+            elements.area.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                elements.area.classList.add("bg-emerald-100");
+            });
+
+            elements.area.addEventListener("dragleave", (e) => {
+                if (!elements.area.contains(e.relatedTarget)) {
+                    elements.area.classList.remove("bg-emerald-100");
+                }
+            });
+
+            elements.area.addEventListener("drop", (e) => {
+                e.preventDefault();
+                elements.area.classList.remove("bg-emerald-100");
+                const files = e.dataTransfer.files;
+                if (files.length) {
+                    elements.input.files = files;
+                    handleFileSelection(files[0]);
+                }
+            });
+            
+            elements.input.addEventListener("change", (e) => {
+                if (e.target.files.length) {
+                    handleFileSelection(e.target.files[0]);
+                }
+            });
+
+            // --- Form Submit Handler (Image Generation) ---
+            elements.form.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const file = elements.input.files[0];
+                const style = elements.styleSelect.value;
+                const size = elements.sizeSelect.value;
+                const styleText = elements.styleSelect.options[elements.styleSelect.selectedIndex].text;
+
+                if (!file) {
+                    alert("Please select an image file first.");
+                    return;
+                }
+                
+                setLoadingState(true, styleText);
+                showResultState(true);
+                elements.originalImage.src = URL.createObjectURL(file);
+                elements.resultStyleTitle.textContent = `${styleText} Style`;
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('image', file);
+                    formData.append('style', style);
+                    formData.append('size', size);
+
+                    const response = await axios.post('/generate', formData, {
+                        headers: {
+                            'Content-Type': 'multipart/form-data'
+                        }
+                    });
+                    
+                    const result = response.data;
+                    
+                    if (result.imageUrl) {
+                        const imageUrl = result.imageUrl;
+                        
+                        elements.generatedImage.src = imageUrl;
+                        elements.downloadButton.href = imageUrl;
+                        
+                        elements.resultSpinner.style.display = 'none';
+                        elements.generatedImage.classList.remove('hidden');
+                        elements.downloadButton.classList.remove('hidden');
+                    } else {
+                        throw new Error("Invalid response from server.");
+                    }
+
+                } catch (error) {
+                    console.error('Generation failed:', error);
+                    const serverError = error.response?.data?.error || error.message;
+                    const friendlyError = `Generation failed: ${serverError}`;
+                    showResultState(false, friendlyError);
+                } finally {
+                    setLoadingState(false);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
