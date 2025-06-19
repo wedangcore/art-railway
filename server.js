@@ -97,7 +97,7 @@ const generateArtImage = async (imageBuffer, prompt, size) => {
     }
 };
 
-// --- PERUBAHAN BARU: Endpoint Proxy untuk Gambar ---
+// --- Endpoint Proxy untuk Gambar ---
 // Endpoint ini akan menerima request untuk gambar, mengambilnya dari sumber asli,
 // dan mengirimkannya ke pengguna seolah-olah berasal dari server kita.
 app.get('/files/*', async (req, res) => {
@@ -114,8 +114,13 @@ app.get('/files/*', async (req, res) => {
             responseType: 'stream' // PENTING: Minta response sebagai stream
         });
 
-        // Set header content-type dari response asli ke response kita
+        // --- PERBAIKAN ---
+        // Menetapkan header agar browser menampilkan gambar (inline) bukan mengunduh (attachment).
+        res.setHeader('Content-Disposition', 'inline');
         res.setHeader('Content-Type', response.headers['content-type']);
+        if (response.headers['content-length']) {
+            res.setHeader('Content-Length', response.headers['content-length']);
+        }
         
         // Alirkan (pipe) data gambar dari sumber asli langsung ke response pengguna
         response.data.pipe(res);
@@ -149,7 +154,7 @@ app.post('/generate', upload.single('image'), async (req, res) => {
         const originalImageUrl = await generateArtImage(imageFile.buffer, prompt, size);
         console.log("Successfully generated original image URL:", originalImageUrl);
 
-        // --- PERUBAHAN: Mengubah URL asli menjadi URL proxy ---
+        // Mengubah URL asli menjadi URL proxy
         const urlObject = new URL(originalImageUrl);
         const proxiedImageUrl = `/files${urlObject.pathname}`; // Membuat URL relatif ke proxy kita
         
@@ -157,7 +162,7 @@ app.post('/generate', upload.single('image'), async (req, res) => {
 
         res.status(200).json({ imageUrl: proxiedImageUrl }); // Kirim URL yang sudah ditutupi
 
-    } catch (error) {
+    } catch (error)
         console.error('Error in /generate endpoint:', error.message);
         res.status(500).json({ error: `An internal server error occurred: ${error.message}` });
     }
